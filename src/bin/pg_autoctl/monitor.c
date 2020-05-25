@@ -1156,7 +1156,7 @@ printNodeArray(NodeAddressArray *nodesArray)
 
 	/*
 	 * Dynamically adjust our display output to the length of the longer
-	 * nodename in the result set
+	 * hostname in the result set
 	 */
 	for (nodesArrayIndex = 0; nodesArrayIndex < nodesArray->count; nodesArrayIndex++)
 	{
@@ -1398,15 +1398,15 @@ printCurrentState(void *ctx, PGresult *result)
 
 	/*
 	 * Dynamically adjust our display output to the length of the longer
-	 * nodename in the result set
+	 * hostname in the result set
 	 */
 	for (currentTupleIndex = 0; currentTupleIndex < nTuples; currentTupleIndex++)
 	{
-		char *nodename = PQgetvalue(result, currentTupleIndex, 0);
+		char *hostname = PQgetvalue(result, currentTupleIndex, 0);
 
-		if (strlen(nodename) > maxNodeNameSize)
+		if (strlen(hostname) > maxNodeNameSize)
 		{
-			maxNodeNameSize = strlen(nodename);
+			maxNodeNameSize = strlen(hostname);
 		}
 	}
 
@@ -1458,7 +1458,7 @@ printCurrentState(void *ctx, PGresult *result)
 
 	for (currentTupleIndex = 0; currentTupleIndex < nTuples; currentTupleIndex++)
 	{
-		char *nodename = PQgetvalue(result, currentTupleIndex, 0);
+		char *hostname = PQgetvalue(result, currentTupleIndex, 0);
 		char *nodeport = PQgetvalue(result, currentTupleIndex, 1);
 		char *groupId = PQgetvalue(result, currentTupleIndex, 2);
 		char *nodeId = PQgetvalue(result, currentTupleIndex, 3);
@@ -1470,14 +1470,14 @@ printCurrentState(void *ctx, PGresult *result)
 		if (pg_autoctl_debug)
 		{
 			fformat(stdout, "%*s | %6s | %5s | %5s | %17s | %17s | %8s | %6s\n",
-					maxNodeNameSize, nodename, nodeport,
+					maxNodeNameSize, hostname, nodeport,
 					groupId, nodeId, currentState, goalState,
 					candidatePriority, replicationQuorum);
 		}
 		else
 		{
 			fformat(stdout, "%*s | %6s | %5s | %5s | %17s | %17s\n",
-					maxNodeNameSize, nodename, nodeport,
+					maxNodeNameSize, hostname, nodeport,
 					groupId, nodeId, currentState, goalState);
 		}
 	}
@@ -2104,7 +2104,7 @@ printFormationURI(void *ctx, PGresult *result)
 
 	/*
 	 * Dynamically adjust our display output to the length of the longer
-	 * nodename in the result set
+	 * hostname in the result set
 	 */
 	for (currentTupleIndex = 0; currentTupleIndex < nTuples; currentTupleIndex++)
 	{
@@ -2198,14 +2198,14 @@ monitor_synchronous_standby_names(Monitor *monitor,
 
 
 /*
- * monitor_set_nodename sets the nodename on the monitor, using a simple SQL
+ * monitor_set_hostname sets the hostname on the monitor, using a simple SQL
  * update command.
  */
 bool
-monitor_set_nodename(Monitor *monitor, int nodeId, const char *nodename)
+monitor_set_hostname(Monitor *monitor, int nodeId, const char *hostname)
 {
 	PGSQL *pgsql = &monitor->pgsql;
-	const char *sql = "SELECT * FROM pgautofailover.set_node_nodename($1, $2)";
+	const char *sql = "SELECT * FROM pgautofailover.set_node_hostname($1, $2)";
 	int paramCount = 2;
 	Oid paramTypes[2] = { INT8OID, TEXTOID };
 	const char *paramValues[2];
@@ -2214,13 +2214,13 @@ monitor_set_nodename(Monitor *monitor, int nodeId, const char *nodename)
 	NodeAddressParseContext parseContext = { { 0 }, &node, false };
 
 	paramValues[0] = intToString(nodeId).strValue;
-	paramValues[1] = nodename;
+	paramValues[1] = hostname;
 
 	if (!pgsql_execute_with_params(pgsql, sql,
 								   paramCount, paramTypes, paramValues,
 								   &parseContext, parseNodeResult))
 	{
-		log_error("Failed to set_node_nodename of node %d from the monitor",
+		log_error("Failed to set_node_hostname of node %d from the monitor",
 				  nodeId);
 		return false;
 	}
@@ -2231,10 +2231,10 @@ monitor_set_nodename(Monitor *monitor, int nodeId, const char *nodename)
 	if (!parseContext.parsedOK)
 	{
 		log_error(
-			"Failed to set node %d nodename to \"%s\" on the monitor "
+			"Failed to set node %d hostname to \"%s\" on the monitor "
 			"because it returned an unexpected result. "
 			"See previous line for details.",
-			nodeId, nodename);
+			nodeId, hostname);
 		return false;
 	}
 

@@ -116,7 +116,7 @@ TupleToAutoFailoverNode(TupleDesc tupleDescriptor, HeapTuple heapTuple)
 								tupleDescriptor, &isNull);
 	Datum groupId = heap_getattr(heapTuple, Anum_pgautofailover_node_groupid,
 								 tupleDescriptor, &isNull);
-	Datum nodeName = heap_getattr(heapTuple, Anum_pgautofailover_node_nodename,
+	Datum nodeHost = heap_getattr(heapTuple, Anum_pgautofailover_node_nodehost,
 								  tupleDescriptor, &isNull);
 	Datum nodePort = heap_getattr(heapTuple, Anum_pgautofailover_node_nodeport,
 								  tupleDescriptor, &isNull);
@@ -160,7 +160,7 @@ TupleToAutoFailoverNode(TupleDesc tupleDescriptor, HeapTuple heapTuple)
 	pgAutoFailoverNode->formationId = TextDatumGetCString(formationId);
 	pgAutoFailoverNode->nodeId = DatumGetInt32(nodeId);
 	pgAutoFailoverNode->groupId = DatumGetInt32(groupId);
-	pgAutoFailoverNode->nodeName = TextDatumGetCString(nodeName);
+	pgAutoFailoverNode->nodeHost = TextDatumGetCString(nodeHost);
 	pgAutoFailoverNode->nodePort = DatumGetInt32(nodePort);
 	pgAutoFailoverNode->goalState = EnumGetReplicationState(goalStateOid);
 	pgAutoFailoverNode->reportedState = EnumGetReplicationState(reportedStateOid);
@@ -462,18 +462,18 @@ AllNodesHaveSameCandidatePriority(List *groupNodeList)
  * GetAutoFailoverNode returns a single AutoFailover node by hostname and port.
  */
 AutoFailoverNode *
-GetAutoFailoverNode(char *nodeName, int nodePort)
+GetAutoFailoverNode(char *nodeHost, int nodePort)
 {
 	AutoFailoverNode *pgAutoFailoverNode = NULL;
 	MemoryContext callerContext = CurrentMemoryContext;
 
 	Oid argTypes[] = {
-		TEXTOID, /* nodename */
+		TEXTOID, /* nodehost */
 		INT4OID  /* nodeport */
 	};
 
 	Datum argValues[] = {
-		CStringGetTextDatum(nodeName), /* nodename */
+		CStringGetTextDatum(nodeHost), /* nodehost */
 		Int32GetDatum(nodePort)        /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -481,7 +481,7 @@ GetAutoFailoverNode(char *nodeName, int nodePort)
 
 	const char *selectQuery =
 		SELECT_ALL_FROM_AUTO_FAILOVER_NODE_TABLE
-		" WHERE nodename = $1 AND nodeport = $2";
+		" WHERE nodehost = $1 AND nodeport = $2";
 
 	SPI_connect();
 
@@ -515,20 +515,20 @@ GetAutoFailoverNode(char *nodeName, int nodePort)
  * identified by node id, node name and node port.
  */
 AutoFailoverNode *
-GetAutoFailoverNodeWithId(int nodeid, char *nodeName, int nodePort)
+GetAutoFailoverNodeWithId(int nodeid, char *nodeHost, int nodePort)
 {
 	AutoFailoverNode *pgAutoFailoverNode = NULL;
 	MemoryContext callerContext = CurrentMemoryContext;
 
 	Oid argTypes[] = {
 		INT4OID, /* nodeport */
-		TEXTOID, /* nodename */
+		TEXTOID, /* nodehost */
 		INT4OID  /* nodeport */
 	};
 
 	Datum argValues[] = {
 		Int32GetDatum(nodeid),         /* nodeid */
-		CStringGetTextDatum(nodeName), /* nodename */
+		CStringGetTextDatum(nodeHost), /* nodehost */
 		Int32GetDatum(nodePort)        /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -536,7 +536,7 @@ GetAutoFailoverNodeWithId(int nodeid, char *nodeName, int nodePort)
 
 	const char *selectQuery =
 		SELECT_ALL_FROM_AUTO_FAILOVER_NODE_TABLE
-		" WHERE nodeid = $1 and nodename = $2 AND nodeport = $3";
+		" WHERE nodeid = $1 and nodehost = $2 AND nodeport = $3";
 
 	SPI_connect();
 
@@ -625,7 +625,7 @@ GetWritableNodeInGroup(char *formationId, int32 groupId)
  * We use simple_heap_update instead of SPI to avoid recursing into triggers.
  */
 int
-AddAutoFailoverNode(char *formationId, int groupId, char *nodeName, int nodePort,
+AddAutoFailoverNode(char *formationId, int groupId, char *nodeHost, int nodePort,
 					ReplicationState goalState,
 					ReplicationState reportedState,
 					int candidatePriority,
@@ -638,7 +638,7 @@ AddAutoFailoverNode(char *formationId, int groupId, char *nodeName, int nodePort
 	Oid argTypes[] = {
 		TEXTOID, /* formationid */
 		INT4OID, /* groupid */
-		TEXTOID, /* nodename */
+		TEXTOID, /* nodehost */
 		INT4OID, /* nodeport */
 		replicationStateTypeOid, /* goalstate */
 		replicationStateTypeOid, /* reportedstate */
@@ -649,7 +649,7 @@ AddAutoFailoverNode(char *formationId, int groupId, char *nodeName, int nodePort
 	Datum argValues[] = {
 		CStringGetTextDatum(formationId),   /* formationid */
 		Int32GetDatum(groupId),             /* groupid */
-		CStringGetTextDatum(nodeName),      /* nodename */
+		CStringGetTextDatum(nodeHost),      /* nodehost */
 		Int32GetDatum(nodePort),            /* nodeport */
 		ObjectIdGetDatum(goalStateOid),     /* goalstate */
 		ObjectIdGetDatum(reportedStateOid), /* reportedstate */
@@ -663,7 +663,7 @@ AddAutoFailoverNode(char *formationId, int groupId, char *nodeName, int nodePort
 
 	const char *insertQuery =
 		"INSERT INTO " AUTO_FAILOVER_NODE_TABLE
-		" (formationid, groupid, nodename, nodeport, goalstate, reportedstate, candidatepriority, replicationquorum)"
+		" (formationid, groupid, nodehost, nodeport, goalstate, reportedstate, candidatepriority, replicationquorum)"
 		" VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING nodeid";
 
 	SPI_connect();
@@ -698,20 +698,20 @@ AddAutoFailoverNode(char *formationId, int groupId, char *nodeName, int nodePort
  * SetNodeGoalState updates only the goal state of a node.
  */
 void
-SetNodeGoalState(char *nodeName, int nodePort, ReplicationState goalState)
+SetNodeGoalState(char *nodeHost, int nodePort, ReplicationState goalState)
 {
 	Oid goalStateOid = ReplicationStateGetEnum(goalState);
 	Oid replicationStateTypeOid = ReplicationStateTypeOid();
 
 	Oid argTypes[] = {
 		replicationStateTypeOid, /* goalstate */
-		TEXTOID, /* nodename */
+		TEXTOID, /* nodehost */
 		INT4OID  /* nodeport */
 	};
 
 	Datum argValues[] = {
 		ObjectIdGetDatum(goalStateOid),       /* goalstate */
-		CStringGetTextDatum(nodeName),        /* nodename */
+		CStringGetTextDatum(nodeHost),        /* nodehost */
 		Int32GetDatum(nodePort)               /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -720,7 +720,7 @@ SetNodeGoalState(char *nodeName, int nodePort, ReplicationState goalState)
 	const char *updateQuery =
 		"UPDATE " AUTO_FAILOVER_NODE_TABLE
 		" SET goalstate = $1, statechangetime = now() "
-		"WHERE nodename = $2 AND nodeport = $3";
+		"WHERE nodehost = $2 AND nodeport = $3";
 
 	SPI_connect();
 
@@ -743,7 +743,7 @@ SetNodeGoalState(char *nodeName, int nodePort, ReplicationState goalState)
  * We use SPI to automatically handle triggers, function calls, etc.
  */
 void
-ReportAutoFailoverNodeState(char *nodeName, int nodePort,
+ReportAutoFailoverNodeState(char *nodeHost, int nodePort,
 							ReplicationState reportedState,
 							bool pgIsRunning, SyncState pgSyncState,
 							XLogRecPtr reportedLSN)
@@ -756,7 +756,7 @@ ReportAutoFailoverNodeState(char *nodeName, int nodePort,
 		BOOLOID,                 /* pg_ctl status: is running */
 		TEXTOID,                 /* pg_stat_replication.sync_state */
 		LSNOID,                  /* reportedlsn */
-		TEXTOID,                 /* nodename */
+		TEXTOID,                 /* nodehost */
 		INT4OID                  /* nodeport */
 	};
 
@@ -765,7 +765,7 @@ ReportAutoFailoverNodeState(char *nodeName, int nodePort,
 		BoolGetDatum(pgIsRunning),            /* pg_ctl status: is running */
 		CStringGetTextDatum(SyncStateToString(pgSyncState)), /* sync_state */
 		LSNGetDatum(reportedLSN),             /* reportedlsn */
-		CStringGetTextDatum(nodeName),        /* nodename */
+		CStringGetTextDatum(nodeHost),        /* nodehost */
 		Int32GetDatum(nodePort)               /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -777,7 +777,7 @@ ReportAutoFailoverNodeState(char *nodeName, int nodePort,
 		"reportedpgisrunning = $2, reportedrepstate = $3, "
 		"reportedlsn = CASE $4 WHEN '0/0'::pg_lsn THEN reportedlsn ELSE $4 END, "
 		"walreporttime = CASE $4 WHEN '0/0'::pg_lsn THEN walreporttime ELSE now() END, "
-		"statechangetime = now() WHERE nodename = $5 AND nodeport = $6";
+		"statechangetime = now() WHERE nodehost = $5 AND nodeport = $6";
 
 	SPI_connect();
 
@@ -800,7 +800,7 @@ ReportAutoFailoverNodeState(char *nodeName, int nodePort,
  * We use SPI to automatically handle triggers, function calls, etc.
  */
 void
-ReportAutoFailoverNodeHealth(char *nodeName, int nodePort,
+ReportAutoFailoverNodeHealth(char *nodeHost, int nodePort,
 							 ReplicationState goalState,
 							 NodeHealthState health)
 {
@@ -810,14 +810,14 @@ ReportAutoFailoverNodeHealth(char *nodeName, int nodePort,
 	Oid argTypes[] = {
 		replicationStateTypeOid, /* goalstate */
 		INT4OID, /* health */
-		TEXTOID, /* nodename */
+		TEXTOID, /* nodehost */
 		INT4OID  /* nodeport */
 	};
 
 	Datum argValues[] = {
 		ObjectIdGetDatum(goalStateOid), /* goalstate */
 		Int32GetDatum(health),          /* reportedversion */
-		CStringGetTextDatum(nodeName),  /* nodename */
+		CStringGetTextDatum(nodeHost),  /* nodehost */
 		Int32GetDatum(nodePort)         /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -827,7 +827,7 @@ ReportAutoFailoverNodeHealth(char *nodeName, int nodePort,
 		"UPDATE " AUTO_FAILOVER_NODE_TABLE
 		" SET goalstate = $1, health = $2, "
 		"healthchecktime = now(), statechangetime = now() "
-		"WHERE nodename = $3 AND nodeport = $4";
+		"WHERE nodehost = $3 AND nodeport = $4";
 
 	SPI_connect();
 
@@ -851,7 +851,7 @@ ReportAutoFailoverNodeHealth(char *nodeName, int nodePort,
  * We use SPI to automatically handle triggers, function calls, etc.
  */
 void
-ReportAutoFailoverNodeReplicationSetting(int nodeid, char *nodeName, int nodePort,
+ReportAutoFailoverNodeReplicationSetting(int nodeid, char *nodeHost, int nodePort,
 										 int candidatePriority,
 										 bool replicationQuorum)
 {
@@ -859,7 +859,7 @@ ReportAutoFailoverNodeReplicationSetting(int nodeid, char *nodeName, int nodePor
 		INT4OID,                 /* candidate_priority */
 		BOOLOID,                 /* repliation_quorum */
 		INT4OID,                 /* nodeid */
-		TEXTOID,                 /* nodename */
+		TEXTOID,                 /* nodehost */
 		INT4OID                  /* nodeport */
 	};
 
@@ -867,7 +867,7 @@ ReportAutoFailoverNodeReplicationSetting(int nodeid, char *nodeName, int nodePor
 		Int32GetDatum(candidatePriority),     /* candidate_priority */
 		BoolGetDatum(replicationQuorum),      /* replication_quorum */
 		Int32GetDatum(nodeid),                /* nodeid */
-		CStringGetTextDatum(nodeName),        /* nodename */
+		CStringGetTextDatum(nodeHost),        /* nodehost */
 		Int32GetDatum(nodePort)               /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -876,7 +876,7 @@ ReportAutoFailoverNodeReplicationSetting(int nodeid, char *nodeName, int nodePor
 	const char *updateQuery =
 		"UPDATE " AUTO_FAILOVER_NODE_TABLE " SET "
 										   "candidatepriority = $1, replicationquorum = $2 "
-										   "WHERE nodeid = $3 and nodename = $4 AND nodeport = $5";
+										   "WHERE nodeid = $3 and nodehost = $4 AND nodeport = $5";
 
 	SPI_connect();
 
@@ -899,15 +899,15 @@ ReportAutoFailoverNodeReplicationSetting(int nodeid, char *nodeName, int nodePor
  * We use SPI to automatically handle triggers, function calls, etc.
  */
 void
-RemoveAutoFailoverNode(char *nodeName, int nodePort)
+RemoveAutoFailoverNode(char *nodeHost, int nodePort)
 {
 	Oid argTypes[] = {
-		TEXTOID, /* nodename */
+		TEXTOID, /* nodehost */
 		INT4OID  /* nodeport */
 	};
 
 	Datum argValues[] = {
-		CStringGetTextDatum(nodeName), /* nodename */
+		CStringGetTextDatum(nodeHost), /* nodehost */
 		Int32GetDatum(nodePort)        /* nodeport */
 	};
 	const int argCount = sizeof(argValues) / sizeof(argValues[0]);
@@ -915,7 +915,7 @@ RemoveAutoFailoverNode(char *nodeName, int nodePort)
 
 	const char *deleteQuery =
 		"DELETE FROM " AUTO_FAILOVER_NODE_TABLE
-		" WHERE nodename = $1 AND nodeport = $2";
+		" WHERE nodehost = $1 AND nodeport = $2";
 
 	SPI_connect();
 

@@ -95,7 +95,7 @@ CREATE TABLE pgautofailover.node
     formationid          text not null default 'default',
     nodeid               bigserial,
     groupid              int not null,
-    nodename             text not null,
+    nodehost             text not null,
     nodeport             int not null,
     goalstate            pgautofailover.replication_state not null default 'init',
     reportedstate        pgautofailover.replication_state not null,
@@ -110,7 +110,7 @@ CREATE TABLE pgautofailover.node
     candidatepriority	 int not null default 100,
     replicationquorum	 bool not null default true,
 
-    UNIQUE (nodename, nodeport),
+    UNIQUE (nodehost, nodeport),
     PRIMARY KEY (nodeid),
     FOREIGN KEY (formationid) REFERENCES pgautofailover.formation(formationid)
  )
@@ -124,7 +124,7 @@ CREATE TABLE pgautofailover.event
     formationid       text not null,
     nodeid            bigint not null,
     groupid           int not null,
-    nodename          text not null,
+    nodehost          text not null,
     nodeport          integer not null,
     reportedstate     pgautofailover.replication_state not null,
     goalstate         pgautofailover.replication_state not null,
@@ -139,10 +139,10 @@ CREATE TABLE pgautofailover.event
 
 GRANT SELECT ON ALL TABLES IN SCHEMA pgautofailover TO autoctl_node;
 
-CREATE FUNCTION pgautofailover.set_node_nodename
+CREATE FUNCTION pgautofailover.set_node_nodehost
  (
     IN node_id   bigint,
-    IN node_name text,
+    IN node_host text,
    OUT node_id   bigint,
    OUT name      text,
    OUT port      int
@@ -150,19 +150,19 @@ CREATE FUNCTION pgautofailover.set_node_nodename
 RETURNS record LANGUAGE SQL STRICT SECURITY DEFINER
 AS $$
       update pgautofailover.node
-         set nodename = node_name
+         set nodehost = node_host
        where nodeid = node_id
-   returning nodeid, nodename, nodeport;
+   returning nodeid, nodehost, nodeport;
 $$;
 
-grant execute on function pgautofailover.set_node_nodename(bigint,text)
+grant execute on function pgautofailover.set_node_nodehost(bigint,text)
    to autoctl_node;
 
 
 CREATE FUNCTION pgautofailover.register_node
  (
     IN formation_id         text,
-    IN node_name            text,
+    IN node_host            text,
     IN node_port            int,
     IN dbname               name,
     IN desired_group_id     int default -1,
@@ -187,7 +187,7 @@ grant execute on function
 CREATE FUNCTION pgautofailover.node_active
  (
     IN formation_id           		text,
-    IN node_name              		text,
+    IN node_host              		text,
     IN node_port              		int,
     IN current_node_id        		int default -1,
     IN current_group_id       		int default -1,
@@ -214,7 +214,7 @@ CREATE FUNCTION pgautofailover.get_nodes
     IN formation_id     text default 'default',
     IN group_id         int default NULL,
    OUT node_id          int,
-   OUT node_name        text,
+   OUT node_host        text,
    OUT node_port        int,
    OUT node_lsn         pg_lsn,
    OUT node_is_primary  bool
@@ -247,10 +247,10 @@ grant execute on function pgautofailover.get_primary(text,int)
 
 CREATE FUNCTION pgautofailover.get_other_nodes
  (
-    IN node_name        text,
+    IN node_host        text,
     IN node_port        int,
    OUT node_id          int,
-   OUT node_name        text,
+   OUT node_host        text,
    OUT node_port        int,
    OUT node_lsn         pg_lsn,
    OUT node_is_primary  bool
@@ -266,11 +266,11 @@ grant execute on function pgautofailover.get_other_nodes(text,int)
 
 CREATE FUNCTION pgautofailover.get_other_nodes
  (
-    IN node_name        text,
+    IN node_host        text,
     IN node_port        int,
     IN current_state    pgautofailover.replication_state,
    OUT node_id          int,
-   OUT node_name        text,
+   OUT node_host        text,
    OUT node_port        int,
    OUT node_lsn         pg_lsn,
    OUT node_is_primary  bool
@@ -289,12 +289,12 @@ grant execute on function pgautofailover.get_other_nodes
 CREATE FUNCTION pgautofailover.get_coordinator
  (
     IN formation_id  text default 'default',
-   OUT node_name     text,
+   OUT node_host     text,
    OUT node_port     int
  )
 RETURNS SETOF record LANGUAGE SQL STRICT
 AS $$
-  select nodename, nodeport
+  select nodehost, nodeport
     from pgautofailover.node
          join pgautofailover.formation using(formationid)
    where formationid = formation_id
@@ -308,7 +308,7 @@ grant execute on function pgautofailover.get_coordinator(text)
 
 CREATE FUNCTION pgautofailover.remove_node
  (
-   node_name text,
+   node_host text,
    node_port int default 5432
  )
 RETURNS bool LANGUAGE C STRICT SECURITY DEFINER
@@ -336,7 +336,7 @@ grant execute on function pgautofailover.perform_failover(text,int)
 
 CREATE FUNCTION pgautofailover.start_maintenance
  (
-   node_name text,
+   node_host text,
    node_port int default 5432
  )
 RETURNS bool LANGUAGE C STRICT SECURITY DEFINER
@@ -350,7 +350,7 @@ grant execute on function pgautofailover.start_maintenance(text,int)
 
 CREATE FUNCTION pgautofailover.stop_maintenance
  (
-   node_name text,
+   node_host text,
    node_port int default 5432
  )
 RETURNS bool LANGUAGE C STRICT SECURITY DEFINER
@@ -371,7 +371,7 @@ AS $$
 with last_events as
 (
   select eventid, eventtime, formationid,
-         nodeid, groupid, nodename, nodeport,
+         nodeid, groupid, nodehost, nodeport,
          reportedstate, goalstate,
          reportedrepstate, reportedlsn, candidatepriority, replicationquorum, description
     from pgautofailover.event
@@ -394,7 +394,7 @@ AS $$
 with last_events as
 (
     select eventid, eventtime, formationid,
-           nodeid, groupid, nodename, nodeport,
+           nodeid, groupid, nodehost, nodeport,
            reportedstate, goalstate,
            reportedrepstate, reportedlsn, candidatepriority, replicationquorum, description
       from pgautofailover.event
@@ -419,7 +419,7 @@ AS $$
 with last_events as
 (
     select eventid, eventtime, formationid,
-           nodeid, groupid, nodename, nodeport,
+           nodeid, groupid, nodehost, nodeport,
            reportedstate, goalstate,
            reportedrepstate, reportedlsn, candidatepriority, replicationquorum, description
       from pgautofailover.event
@@ -437,7 +437,7 @@ comment on function pgautofailover.last_events(text,int,int)
 CREATE FUNCTION pgautofailover.current_state
  (
     IN formation_id         text default 'default',
-   OUT nodename             text,
+   OUT nodehost             text,
    OUT nodeport             int,
    OUT group_id             int,
    OUT node_id              bigint,
@@ -448,7 +448,7 @@ CREATE FUNCTION pgautofailover.current_state
  )
 RETURNS SETOF record LANGUAGE SQL STRICT
 AS $$
-   select nodename, nodeport, groupid, nodeid, reportedstate, goalstate,
+   select nodehost, nodeport, groupid, nodeid, reportedstate, goalstate,
    		candidatepriority, replicationquorum
    from pgautofailover.node
    where formationid = formation_id
@@ -462,7 +462,7 @@ CREATE FUNCTION pgautofailover.current_state
  (
     IN formation_id         text,
     IN group_id             int,
-   OUT nodename             text,
+   OUT nodehost             text,
    OUT nodeport             int,
    OUT group_id             int,
    OUT node_id              bigint,
@@ -473,7 +473,7 @@ CREATE FUNCTION pgautofailover.current_state
  )
 RETURNS SETOF record LANGUAGE SQL STRICT
 AS $$
-   select nodename, nodeport, groupid, nodeid, reportedstate, goalstate,
+   select nodehost, nodeport, groupid, nodeid, reportedstate, goalstate,
    		  candidatepriority, replicationquorum
    from pgautofailover.node
    where formationid = formation_id
@@ -494,10 +494,10 @@ CREATE FUNCTION pgautofailover.formation_uri
 RETURNS text LANGUAGE SQL STRICT
 AS $$
     select case
-           when string_agg(format('%s:%s', nodename, nodeport),',') is not null
+           when string_agg(format('%s:%s', nodehost, nodeport),',') is not null
            then format(
                'postgres://%s/%s?target_session_attrs=read-write&sslmode=%s%s%s',
-               string_agg(format('%s:%s', nodename, nodeport),','),
+               string_agg(format('%s:%s', nodehost, nodeport),','),
                -- as we join formation on node we get the same dbname for all
                -- entries, pick one.
                min(dbname),
@@ -584,7 +584,7 @@ CREATE TRIGGER disable_secondary_check
 CREATE FUNCTION pgautofailover.set_node_candidate_priority
  (
     IN nodeid				int,
-	IN nodename             text,
+	IN nodehost             text,
 	IN nodeport             int,
     IN candidate_priority	int
  )
@@ -601,7 +601,7 @@ grant execute on function
 CREATE FUNCTION pgautofailover.set_node_replication_quorum
  (
     IN nodeid				int,
-	IN nodename             text,
+	IN nodehost             text,
 	IN nodeport             int,
     IN replication_quorum	bool
  )

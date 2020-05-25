@@ -36,9 +36,9 @@
 	make_int_option("pg_autoctl", "group", "group", false, &(config->groupId))
 
 #define OPTION_AUTOCTL_NODENAME(config) \
-	make_strbuf_option("pg_autoctl", "nodename", "nodename", \
+	make_strbuf_option("pg_autoctl", "hostname", "hostname", \
 					   true, _POSIX_HOST_NAME_MAX, \
-					   config->nodename)
+					   config->hostname)
 
 #define OPTION_AUTOCTL_NODEKIND(config) \
 	make_strbuf_option("pg_autoctl", "nodekind", NULL, false, NAMEDATALEN, \
@@ -479,7 +479,7 @@ keeper_config_log_settings(KeeperConfig config)
 	log_debug("pg_autoctl.monitor: %s", config.monitor_pguri);
 	log_debug("pg_autoctl.formation: %s", config.formation);
 
-	log_debug("postgresql.nodename: %s", config.nodename);
+	log_debug("postgresql.hostname: %s", config.hostname);
 	log_debug("postgresql.nodekind: %s", config.nodeKind);
 	log_debug("postgresql.pgdata: %s", config.pgSetup.pgdata);
 	log_debug("postgresql.pg_ctl: %s", config.pgSetup.pg_ctl);
@@ -693,7 +693,7 @@ keeper_config_accept_new(KeeperConfig *config, KeeperConfig *newConfig)
 	}
 
 	/*
-	 * We don't support changing formation, group, or nodename mid-flight: we
+	 * We don't support changing formation, group, or hostname mid-flight: we
 	 * might have to register again to the monitor to make that work, and in
 	 * that case an admin should certainly be doing some offline steps, maybe
 	 * even having to `pg_autoctl create` all over again.
@@ -706,17 +706,17 @@ keeper_config_accept_new(KeeperConfig *config, KeeperConfig *newConfig)
 	}
 
 	/*
-	 * Changing the nodename seems ok, our registration is checked against
-	 * formation/groupId/nodeId anyway. The nodename is used so that other
+	 * Changing the hostname seems ok, our registration is checked against
+	 * formation/groupId/nodeId anyway. The hostname is used so that other
 	 * nodes in the network may contact us. Again, it might be a change of
 	 * public IP address, e.g. switching to IPv6.
 	 */
-	if (strneq(newConfig->nodename, config->nodename))
+	if (strneq(newConfig->hostname, config->hostname))
 	{
-		log_info("Reloading configuration: nodename is now \"%s\"; "
+		log_info("Reloading configuration: hostname is now \"%s\"; "
 				 "used to be \"%s\"",
-				 newConfig->nodename, config->nodename);
-		strlcpy(config->nodename, newConfig->nodename, _POSIX_HOST_NAME_MAX);
+				 newConfig->hostname, config->hostname);
+		strlcpy(config->hostname, newConfig->hostname, _POSIX_HOST_NAME_MAX);
 	}
 
 	/*
@@ -869,7 +869,7 @@ keeper_config_init_nodekind(KeeperConfig *config)
 
 /*
  * keeper_config_set_backup_directory sets the pg_basebackup target directory
- * to ${PGDATA}/../backup/${nodename} by default. Adding the local nodename
+ * to ${PGDATA}/../backup/${hostname} by default. Adding the local hostname
  * makes it possible to run several instances of Postgres and pg_autoctl on the
  * same host, which is nice for development and testing scenarios.
  *
@@ -886,13 +886,13 @@ keeper_config_set_backup_directory(KeeperConfig *config, int nodeId)
 	char backupDirectory[MAXPGPATH] = { 0 };
 	char absoluteBackupDirectory[PATH_MAX];
 
-	/* build the default nodename based backup directory path */
-	sformat(subdirs, MAXPGPATH, "backup/%s", config->nodename);
+	/* build the default hostname based backup directory path */
+	sformat(subdirs, MAXPGPATH, "backup/%s", config->hostname);
 	path_in_same_directory(pgdata, subdirs, backupDirectory);
 
 	/*
 	 * If the user didn't provide a backupDirectory and we're not registered
-	 * yet, just use the default value with the nodename. Don't even check it
+	 * yet, just use the default value with the hostname. Don't even check it
 	 * now.
 	 */
 	if (IS_EMPTY_STRING_BUFFER(config->backupDirectory) && nodeId <= 0)
@@ -905,7 +905,7 @@ keeper_config_set_backup_directory(KeeperConfig *config, int nodeId)
 	if (IS_EMPTY_STRING_BUFFER(config->backupDirectory) ||
 		strcmp(backupDirectory, config->backupDirectory) == 0)
 	{
-		/* we might be able to use the nodeId, better than the nodename */
+		/* we might be able to use the nodeId, better than the hostname */
 		if (nodeId > 0)
 		{
 			sformat(subdirs, MAXPGPATH, "backup/node_%d", nodeId);
