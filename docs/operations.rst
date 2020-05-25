@@ -77,8 +77,8 @@ The monitor exposes the following API to schedule maintenance operations on
 a secondary node::
 
   $ psql postgres://autoctl@monitor/pg_auto_failover
-  > select pgautofailover.start_maintenance('nodename', 5432);
-  > select pgautofailover.stop_maintenance('nodename', 5432);
+  > select pgautofailover.start_maintenance('hostname', 5432);
+  > select pgautofailover.stop_maintenance('hostname', 5432);
 
 The command line tool ``pg_autoctl`` also exposes an API to schedule
 maintenance operations on the current node, which must be a secondary node
