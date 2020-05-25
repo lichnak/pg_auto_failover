@@ -846,7 +846,7 @@ SELECT reportedstate
         """
         Returns the current list of events from the monitor.
         """
-        last_events_query = "select eventtime, nodeid, hostname, " \
+        last_events_query = "select eventtime, nodeid, nodehost, " \
             "reportedstate, goalstate, " \
             "reportedrepstate, reportedlsn, description " \
             "from pgautofailover.last_events('default', count => 20)"
@@ -855,7 +855,7 @@ SELECT reportedstate
 
     def get_events_str(self):
         return "\n".join(
-            ["%s %25s:%-14s %17s/%-17s %7s %10s %s" % ("eventtime", "id", "hostname",
+            ["%s %25s:%-14s %17s/%-17s %7s %10s %s" % ("eventtime", "id", "nodehost",
                                                        "state", "goal state",
                                                        "repl st", "lsn", "event")]
             +
